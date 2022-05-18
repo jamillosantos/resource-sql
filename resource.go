@@ -3,9 +3,12 @@ package resourcesql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 )
+
+var ErrServiceNotStarted = errors.New("service not started")
 
 type Resource struct {
 	*sql.DB
@@ -61,7 +64,7 @@ func (service *Resource) Name() string {
 // Start will start the service in a blocking way.
 //
 // If the service is successfully started, `nil` should be returned. Otherwise, an error must be returned.
-func (service *Resource) Start(_ context.Context) error {
+func (service *Resource) Start(ctx context.Context) error {
 	if service.config == nil {
 		return ErrMissingConfiguration
 	}
@@ -90,7 +93,7 @@ func (service *Resource) Start(_ context.Context) error {
 	}
 
 	if !service.skipTestWhenStarts {
-		err = db.Ping()
+		err = db.PingContext(ctx)
 		if err != nil {
 			_ = db.Close()
 			return fmt.Errorf("%w: %s", ErrInitialConnectionTestFailed, err.Error())
@@ -108,4 +111,11 @@ func (service *Resource) Start(_ context.Context) error {
 // If the service is successfully stopped, `nil` should be returned. Otherwise, an error must be returned.
 func (service *Resource) Stop(_ context.Context) error {
 	return service.DB.Close()
+}
+
+func (service *Resource) IsHealthy(ctx context.Context) error {
+	if service.DB == nil {
+		return ErrServiceNotStarted
+	}
+	return service.DB.PingContext(ctx)
 }
